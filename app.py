@@ -3,10 +3,11 @@ import pandas as pd
 import joblib
 
 # ===============================
-# PAGE CONFIG (HARUS PALING ATAS)
+# PAGE CONFIG (WAJIB PALING ATAS)
 # ===============================
 st.set_page_config(
-    page_title="📞 Telemarketing Prediction",
+    page_title="Telemarketing Lead Scoring",
+    page_icon="📞",
     layout="centered"
 )
 
@@ -22,61 +23,79 @@ def load_assets():
 model, preprocess = load_assets()
 
 # ===============================
-# UI
+# UI - HEADER
 # ===============================
-st.title("📞 Telemarketing Campaign Prediction")
-st.write("Prediksi probabilitas nasabah subscribe **Term Deposit**")
+st.title("📞 Telemarketing Lead Scoring")
+st.write("Prediksi kemungkinan nasabah **subscribe Term Deposit**")
+
+st.divider()
 
 # ===============================
-# USER INPUT (SIMPLE)
+# INPUT NASABAH (MINIMAL & CLEAN)
 # ===============================
-age = st.number_input("Age", 18, 100, 35)
+st.subheader("🧾 Data Nasabah")
 
-job = st.selectbox("Job", [
-    "admin", "blue-collar", "technician", "services",
-    "management", "retired", "self-employed",
-    "student", "unemployed", "entrepreneur"
-])
+age = st.number_input("Age", min_value=18, max_value=100, value=30)
 
-marital = st.selectbox("Marital Status", ["Married", "Single", "Divorced"])
-education = st.selectbox("Education", [
-    "Basic 4y", "Basic 6y", "Basic 9y",
-    "High School", "Professional Course",
-    "University Degree", "Unknown"
-])
+job_label_map = {
+    "Admin": "admin.",
+    "Blue Collar": "blue-collar",
+    "Technician": "technician",
+    "Services": "services",
+    "Management": "management",
+    "Retired": "retired",
+    "Student": "student",
+    "Entrepreneur": "entrepreneur",
+    "Unemployed": "unemployed"
+}
+job_label = st.selectbox("Job", list(job_label_map.keys()))
+job = job_label_map[job_label]
 
-duration = st.number_input("Call Duration (seconds)", 0, 5000, 120)
+marital = st.selectbox(
+    "Marital Status",
+    ["Single", "Married", "Divorced"]
+).lower()
 
-# ===============================
-# MAPPING (UI → MODEL)
-# ===============================
-education_map = {
-    "Basic 4y": "basic.4y",
-    "Basic 6y": "basic.6y",
-    "Basic 9y": "basic.9y",
+education_label_map = {
+    "Basic 4 Years": "basic.4y",
+    "Basic 6 Years": "basic.6y",
+    "Basic 9 Years": "basic.9y",
     "High School": "high.school",
     "Professional Course": "professional.course",
     "University Degree": "university.degree",
     "Unknown": "unknown"
 }
+education_label = st.selectbox("Education", list(education_label_map.keys()))
+education = education_label_map[education_label]
 
-marital = marital.lower()
+balance = st.number_input("Balance (€)", min_value=0, value=1000)
+
+housing = st.selectbox("Housing Loan", ["No", "Yes"]).lower()
+loan = st.selectbox("Personal Loan", ["No", "Yes"]).lower()
+
+duration = st.number_input(
+    "Call Duration (seconds)",
+    min_value=0,
+    value=120,
+    help="Durasi panggilan. Biasanya sangat berpengaruh pada hasil prediksi."
+)
 
 # ===============================
-# INPUT DATAFRAME (RAW)
+# BUILD INPUT DATAFRAME
 # ===============================
 input_df = pd.DataFrame([{
     "age": age,
     "job": job,
     "marital": marital,
-    "education": education_map[education],
+    "education": education,
+    "balance": balance,
+    "housing": housing,
+    "loan": loan,
     "duration": duration,
 
-    # DEFAULT (TIDAK DITAMPILKAN)
+    # ===== DEFAULT VALUE (TIDAK DITAMPILKAN DI UI) =====
     "campaign": 1,
     "default": "no",
-    "housing": "no",
-    "loan": "no",
     "contact": "cellular",
     "day_of_week": "mon",
     "month": "may",
@@ -91,16 +110,20 @@ input_df = pd.DataFrame([{
 }])
 
 # ===============================
-# PREDICTION
+# PREDICT
 # ===============================
-if st.button("Predict"):
+st.divider()
+
+if st.button("🔍 Predict"):
+    # 🔑 WAJIB TRANSFORM DULU
     X_encoded = preprocess.transform(input_df)
 
-    prob = model.predict_proba(X_encoded)[0][1]
+    pred_label = model.predict(X_encoded)[0]
+    pred_prob = model.predict_proba(X_encoded)[0, 1]
 
     st.subheader("📊 Prediction Result")
 
-    if prob >= 0.5:
-        st.success(f"✅ Subscribe Probability: **{prob:.2%}**")
+    if pred_label == 1:
+        st.success(f"✅ **Subscribe**\n\nProbability: **{pred_prob:.2%}**")
     else:
-        st.warning(f"❌ Not Subscribe Probability: **{prob:.2%}**")
+        st.error(f"❌ **Not Subscribe**\n\nProbability: **{pred_prob:.2%}**")
