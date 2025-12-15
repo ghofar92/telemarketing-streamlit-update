@@ -2,73 +2,50 @@ import streamlit as st
 import pandas as pd
 import joblib
 
-# ==================================================
+# ===============================
 # PAGE CONFIG (HARUS PALING ATAS)
-# ==================================================
+# ===============================
 st.set_page_config(
     page_title="Telemarketing Lead Scoring",
     page_icon="📞",
     layout="centered"
 )
 
-# ==================================================
-# LOAD MODEL
-# ==================================================
+# ===============================
+# LOAD MODEL & PREPROCESSOR
+# ===============================
 @st.cache_resource
-def load_model():
-    return joblib.load("model_telemarketing_campaign.sav")
+def load_assets():
+    model = joblib.load("model_telemarketing_campaign.sav")
+    preprocess = joblib.load("preprocess.pkl")
+    return model, preprocess
 
-model = load_model()
+model, preprocess = load_assets()
 
-# ==================================================
-# TITLE
-# ==================================================
-st.title("📞 Telemarketing Lead Scoring")
-st.write("Prediksi kemungkinan nasabah **subscribe Term Deposit**")
+# ===============================
+# UI HEADER
+# ===============================
+st.title("📞 Telemarketing Campaign Prediction")
+st.write("Prediksi probabilitas nasabah **subscribe Term Deposit**")
 
 st.divider()
 
-# ==================================================
-# INPUT NASABAH (MINIMAL & PENTING)
-# ==================================================
-st.subheader("🧾 Data Nasabah")
+# ===============================
+# INPUT USER (YANG PENTING SAJA)
+# ===============================
+age = st.number_input("Age", min_value=18, max_value=100, value=35)
 
-# ---- Numeric ----
-age = st.number_input("Usia", min_value=18, max_value=100, value=35)
-balance = st.number_input(
-    "Tabungan / Balance (€)",
-    value=1000,
-)
+job = st.selectbox("Job", [
+    "admin.", "blue-collar", "technician", "services",
+    "management", "retired", "self-employed", "student",
+    "unemployed", "entrepreneur", "housemaid", "unknown"
+])
 
-# ---- Job (label → value model) ----
-job_label_to_value = {
-    "Admin": "admin.",
-    "Blue Collar": "blue-collar",
-    "Technician": "technician",
-    "Services": "services",
-    "Management": "management",
-    "Retired": "retired",
-    "Entrepreneur": "entrepreneur",
-    "Self Employed": "self-employed",
-    "Student": "student",
-    "Unemployed": "unemployed",
-    "Unknown": "unknown"
-}
+marital = st.selectbox("Marital Status", [
+    "married", "single", "divorced"
+])
 
-job_label = st.selectbox("Pekerjaan", list(job_label_to_value.keys()))
-job = job_label_to_value[job_label]
-
-# Marital Status (Kapital di UI)
-marital_map = {
-    "Married": "married",
-    "Single": "single",
-    "Divorced": "divorced"
-}
-marital_label = st.selectbox("Marital Status", list(marital_map.keys()))
-marital = marital_map[marital_label]
-
-# Education (tanpa titik di UI)
-education_map = {
+education_label_to_value = {
     "Basic 4y": "basic.4y",
     "Basic 6y": "basic.6y",
     "Basic 9y": "basic.9y",
@@ -77,59 +54,72 @@ education_map = {
     "University Degree": "university.degree",
     "Unknown": "unknown"
 }
-education_label = st.selectbox("Education", list(education_map.keys()))
-education = education_map[education_label]
 
-housing = st.selectbox("Housing Loan", ["No", "Yes"])
-housing = housing.lower()
+education_label = st.selectbox(
+    "Education",
+    list(education_label_to_value.keys())
+)
+education = education_label_to_value[education_label]
 
-loan = st.selectbox("Personal Loan", ["No", "Yes"])
-loan = loan.lower()
+housing = st.selectbox("Housing Loan", ["yes", "no"])
+loan = st.selectbox("Personal Loan", ["yes", "no"])
+
+# OPTIONAL (untuk eksperimen pengaruh durasi)
+duration = st.number_input(
+    "Call Duration (seconds)",
+    min_value=0,
+    value=120,
+    help="Durasi panggilan (fitur penting)"
+)
 
 # ===============================
-# DATAFRAME INPUT (MODEL FORMAT)
+# BUILD INPUT DATAFRAME
 # ===============================
 input_df = pd.DataFrame([{
-    # Input utama
+    # INPUT USER
     "age": age,
     "job": job,
     "marital": marital,
     "education": education,
-    "balance": balance,
     "housing": housing,
     "loan": loan,
+    "duration": duration,
 
-    # ===============================
     # DEFAULT VALUE (TIDAK DITAMPILKAN)
-    # ===============================
-    "duration": 120,
     "campaign": 1,
     "default": "no",
     "contact": "cellular",
     "day_of_week": "mon",
     "month": "may",
-    "poutcome": "nonexistent",
-    "pdays": 999,
+    "poutcome": "unknown",
+    "pdays": -1,
     "previous": 0,
     "emp.var.rate": 1.1,
     "cons.price.idx": 93.994,
     "cons.conf.idx": -36.4,
     "euribor3m": 4.857,
-    "nr.employed": 5191
+    "nr.employed": 5191,
+    "generation": "Other"
 }])
 
 # ===============================
-# PREDICTION
+# PREDICT
 # ===============================
-st.divider()
-
 if st.button("🔍 Predict"):
-    pred_label = model.predict(input_df)[0]
-    pred_prob = model.predict_proba(input_df)[0][1]
+    try:
+        # WAJIB: preprocessing dulu
+        X_processed = preprocess.transform(input_df)
 
-    st.subheader("📌 Prediction Result")
+        pred = model.predict(X_processed)[0]
+        prob = model.predict_proba(X_processed)[0][1]
 
-    if pred_label == 1:
-        st.success(f"✅ **Subscribe**\n\nProbability: **{pred_prob:.2%}**")
-    else:
-        st.error(f"❌ **Not Subscribe**\n\nProbability: **{pred_prob:.2%}**")
+        st.subheader("📊 Prediction Result")
+
+        if pred == 1:
+            st.success(f"✅ **SUBSCRIBE**\n\nProbabilitas: **{prob:.2%}**")
+        else:
+            st.error(f"❌ **NOT SUBSCRIBE**\n\nProbabilitas: **{prob:.2%}**")
+
+    except Exception as e:
+        st.error("❌ Terjadi error saat prediksi")
+        st.exception(e)
